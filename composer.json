@@ -1,0 +1,52 @@
+{
+    "name": "tankosamurai/pocketmine-mp",
+    "authors": [
+        {
+            "name": "tankosamurai",
+            "email": "tankosamurai@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "pocketmine\\": "src/pocketmine/",
+            "pocketmine\\block\\": "src/pocketmine/block/",
+            "pocketmine\\command\\": "src/pocketmine/command/",
+            "pocketmine\\command\\defaults\\": "src/pocketmine/command/defaults/",
+            "pocketmine\\entity\\": "src/pocketmine/entity/",
+            "pocketmine\\event\\block\\": "src/pocketmine/event/block/",
+            "pocketmine\\event\\entity\\": "src/pocketmine/event/entity/",
+            "pocketmine\\event\\inventory\\": "src/pocketmine/event/inventory/",
+            "pocketmine\\event\\level\\": "src/pocketmine/event/level/",
+            "pocketmine\\event\\player\\": "src/pocketmine/event/player/",
+            "pocketmine\\event\\plugin\\": "src/pocketmine/event/plugin/",
+            "pocketmine\\event\\server\\": "src/pocketmine/event/server/",
+            "pocketmine\\event\\": "src/pocketmine/event/",
+            "pocketmine\\inventory\\": "src/pocketmine/inventory/",
+            "pocketmine\\item\\": "src/pocketmine/item/",
+            "pocketmine\\lang\\": "src/pocketmine/lang/",
+            "pocketmine\\level\\format\\": "src/pocketmine/level/format/",
+            "pocketmine\\level\\generator\\": "src/pocketmine/level/generator/",
+            "pocketmine\\level\\particle\\": "src/pocketmine/level/particle",
+            "pocketmine\\level\\sound\\": "src/pocketmine/level/sound",
+            "pocketmine\\math\\": "src/pocketmine/math/",
+            "pocketmine\\metadata\\": "src/pocketmine/metadata/",
+            "pocketmine\\nbt\\": "src/pocketmine/nbt/",
+            "pocketmine\\nbt\\tag\\": "src/pocketmine/nbt/tag/",
+            "pocketmine\\network\\": "src/pocketmine/network/",
+            "pocketmine\\network\\protocol\\": "src/pocketmine/network/protocol/",
+            "pocketmine\\network\\query\\": "src/pocketmine/network/query/",
+            "pocketmine\\network\\rcon\\": "src/pocketmine/network/rcon/",
+            "pocketmine\\network\\upnp\\": "src/pocketmine/network/upnp/",
+            "pocketmine\\permission\\": "src/pocketmine/permission/",
+            "pocketmine\\plugin\\": "src/pocketmine/plugin/",
+            "pocketmine\\resources\\": "src/pocketmine/resources/",
+            "pocketmine\\scheduler\\": "src/pocketmine/scheduler/",
+            "pocketmine\\tile\\": "src/pocketmine/tile/",
+            "pocketmine\\updater\\": "src/pocketmine/updater/",
+            "pocketmine\\utils\\": "src/pocketmine/utils/",
+            "pocketmine\\wizard\\": "src/pocketmine/wizard/"
+        }
+    }
+}
