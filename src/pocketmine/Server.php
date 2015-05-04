@@ -91,7 +91,6 @@ use pocketmine\plugin\PharPluginLoader;
 use pocketmine\plugin\Plugin;
 use pocketmine\plugin\PluginLoadOrder;
 use pocketmine\plugin\PluginManager;
-use pocketmine\scheduler\CallbackTask;
 use pocketmine\scheduler\SendUsageTask;
 use pocketmine\scheduler\ServerScheduler;
 use pocketmine\tile\Chest;
@@ -153,8 +152,14 @@ class Server{
 	 */
 	private $tickCounter;
 	private $nextTick = 0;
-	private $tickAverage = [20, 20, 20, 20, 20];
-	private $useAverage = [20, 20, 20, 20, 20];
+	private $tickAverage = [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20];
+	private $useAverage = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+	private $maxTick = 20;
+	private $maxUse = 0;
+
+	private $sendUsageTicker = 0;
+
+	private $dispatchSignals = false;
 
 	/** @var \AttachableThreadedLogger */
 	private $logger;
@@ -200,6 +205,12 @@ class Server{
 	private $networkCompressionLevel = 7;
 
 	private $autoTickRate = true;
+	private $autoTickRateLimit = 20;
+	private $alwaysTickPlayers = false;
+	private $baseTickRate = 1;
+
+	private $autoSaveTicker = 0;
+	private $autoSaveTicks = 0;
 
 	/** @var BaseLang */
 	private $baseLang;
@@ -588,6 +599,15 @@ class Server{
 	 * @return float
 	 */
 	public function getTicksPerSecond(){
+		return round($this->maxTick, 2);
+	}
+
+	/**
+	 * Returns the last server TPS average measure
+	 *
+	 * @return float
+	 */
+	public function getTicksPerSecondAverage(){
 		return round(array_sum($this->tickAverage) / count($this->tickAverage), 2);
 	}
 
@@ -597,6 +617,15 @@ class Server{
 	 * @return float
 	 */
 	public function getTickUsage(){
+		return round($this->maxUse * 100, 2);
+	}
+
+	/**
+	 * Returns the TPS usage/load average in %
+	 *
+	 * @return float
+	 */
+	public function getTickUsageAverage(){
 		return round((array_sum($this->useAverage) / count($this->useAverage)) * 100, 2);
 	}
 
@@ -1030,6 +1059,8 @@ class Server{
 
 		$this->getPluginManager()->callEvent(new LevelLoadEvent($level));
 
+		$level->setTickRate($this->baseTickRate);
+
 		/*foreach($entities->getAll() as $entity){
 			if(!isset($entity["id"])){
 				break;
@@ -1164,6 +1195,8 @@ class Server{
 			$this->levels[$level->getId()] = $level;
 
 			$level->initLevel();
+
+			$level->setTickRate($this->baseTickRate);
 		}catch(\Exception $e){
 			$this->logger->error($this->getLanguage()->translateString("pocketmine.level.generateError", [$name, $e->getMessage()]));
 			if($this->logger instanceof MainLogger){
@@ -1554,7 +1587,10 @@ class Server{
 		$this->networkCompressionLevel = $this->getProperty("network.compression-level", 7);
 		$this->networkCompressionAsync = $this->getProperty("network.async-compression", true);
 
-		$this->autoTickRate = $this->getProperty("level-settings.auto-tick-rate", true);
+		$this->autoTickRate = (bool) $this->getProperty("level-settings.auto-tick-rate", true);
+		$this->autoTickRateLimit = (int) $this->getProperty("level-settings.auto-tick-rate-limit", 20);
+		$this->alwaysTickPlayers = (int) $this->getProperty("level-settings.always-tick-players", false);
+		$this->baseTickRate = (int) $this->getProperty("level-settings.base-tick-rate", 1);
 
 		$this->scheduler = new ServerScheduler();
 
@@ -1602,7 +1638,7 @@ class Server{
 
 		$this->logger->info($this->getLanguage()->translateString("pocketmine.server.networkStart", [$this->getIp() === "" ? "*" : $this->getIp(), $this->getPort()]));
 		define("BOOTUP_RANDOM", @Utils::getRandomBytes(16));
-		$this->serverID = Binary::readLong(substr(Utils::getUniqueID(true, $this->getIp() . $this->getPort()), 0, 8));
+		$this->serverID = Utils::getServerUniqueId($this->getIp() . $this->getPort());
 
 		$this->network = new Network($this);
 		$this->network->setName($this->getMotd());
@@ -1704,7 +1740,7 @@ class Server{
 		}
 
 		if($this->getAutoSave() and $this->getProperty("ticks-per.autosave", 6000) > 0){
-			$this->scheduler->scheduleDelayedRepeatingTask(new CallbackTask([$this, "doAutoSave"]), $this->getProperty("ticks-per.autosave", 6000), $this->getProperty("ticks-per.autosave", 6000));
+			$this->autoSaveTicks = (int) $this->getProperty("ticks-per.autosave", 6000);
 		}
 
 		$this->enablePlugins(PluginLoadOrder::POSTWORLD);
@@ -1958,25 +1994,32 @@ class Server{
 				UPnP::RemovePortForward($this->getPort());
 			}
 
+			$this->getLogger()->debug("Disabling all plugins");
 			$this->pluginManager->disablePlugins();
 
 			foreach($this->players as $player){
 				$player->close($player->getLeaveMessage(), $this->getProperty("settings.shutdown-message", "Server closed"));
 			}
 
+			$this->getLogger()->debug("Unloading all levels");
 			foreach($this->getLevels() as $level){
 				$this->unloadLevel($level, true);
 			}
 
+			$this->getLogger()->debug("Removing event handlers");
 			HandlerList::unregisterAll();
 
+			$this->getLogger()->debug("Stopping all tasks");
 			$this->scheduler->cancelAllTasks();
 			$this->scheduler->mainThreadHeartbeat(PHP_INT_MAX);
 
+			$this->getLogger()->debug("Saving properties");
 			$this->properties->save();
 
+			$this->getLogger()->debug("Closing console");
 			$this->console->kill();
 
+			$this->getLogger()->debug("Stopping network interfaces");
 			foreach($this->network->getInterfaces() as $interface){
 				$interface->shutdown();
 				$this->network->unregisterInterface($interface);
@@ -2001,7 +2044,7 @@ class Server{
 		}
 
 		if($this->getProperty("settings.send-usage", true) !== false){
-			$this->scheduler->scheduleDelayedRepeatingTask(new CallbackTask([$this, "sendUsage"]), 6000, 6000);
+			$this->sendUsageTicker = 6000;
 			$this->sendUsage();
 		}
 
@@ -2017,11 +2060,8 @@ class Server{
 			pcntl_signal(SIGTERM, [$this, "handleSignal"]);
 			pcntl_signal(SIGINT, [$this, "handleSignal"]);
 			pcntl_signal(SIGHUP, [$this, "handleSignal"]);
-			$this->getScheduler()->scheduleRepeatingTask(new CallbackTask("pcntl_signal_dispatch"), 5);
+			$this->dispatchSignals = true;
 		}
-
-
-		$this->getScheduler()->scheduleRepeatingTask(new CallbackTask([$this, "checkTicks"]), 20 * 5);
 
 		$this->logger->info($this->getLanguage()->translateString("pocketmine.server.defaultGameMode", [self::getGamemodeString($this->getGamemode())]));
 
@@ -2036,12 +2076,6 @@ class Server{
 	public function handleSignal($signo){
 		if($signo === SIGTERM or $signo === SIGINT or $signo === SIGHUP){
 			$this->shutdown();
-		}
-	}
-
-	public function checkTicks(){
-		if($this->getTicksPerSecond() < 12){
-			$this->logger->warning($this->getLanguage()->translateString("pocketmine.server.tickOverload"));
 		}
 	}
 
@@ -2152,7 +2186,10 @@ class Server{
 	private function tickProcessor(){
 		while($this->isRunning){
 			$this->tick();
-			usleep((int) max(1, ($this->nextTick - microtime(true)) * 1000000));
+			$next = $this->nextTick - 0.001;
+			if($next > microtime(true)){
+				time_sleep_until($next);
+			}
 		}
 	}
 
@@ -2164,7 +2201,12 @@ class Server{
 	private function checkTickUpdates($currentTick){
 		//Do level ticks
 		foreach($this->getLevels() as $level){
-			if($level->getTickRate() > 1 and --$level->tickRateCounter > 0){
+			if($level->getTickRate() > $this->baseTickRate and --$level->tickRateCounter > 0){
+				if($this->alwaysTickPlayers){
+					foreach($level->getPlayers() as $p){
+						$p->onUpdate($currentTick);
+					}
+				}
 				continue;
 			}
 			try{
@@ -2173,19 +2215,17 @@ class Server{
 				$tickMs = (microtime(true) - $levelTime) * 1000;
 
 				if($this->autoTickRate){
-					if($tickMs < 50 and $level->getTickRate() > 1){
-						if($level->getTickRate() > 1){
-							$level->setTickRate($r = $level->getTickRate() - 1);
-							if($r > 1){
-								$level->tickRateCounter = $level->getTickRate();
-							}
-							$this->getLogger()->debug("Raising level \"".$level->getName()."\" tick rate to ".$level->getTickRate()." ticks");
+					if($tickMs < 50 and $level->getTickRate() > $this->baseTickRate){
+						$level->setTickRate($r = $level->getTickRate() - 1);
+						if($r > $this->baseTickRate){
+							$level->tickRateCounter = $level->getTickRate();
 						}
+						$this->getLogger()->debug("Raising level \"".$level->getName()."\" tick rate to ".$level->getTickRate()." ticks");
 					}elseif($tickMs >= 50){
-						if($level->getTickRate() === 1){
-							$level->setTickRate(max(2, min(10, floor($tickMs / 50))));
+						if($level->getTickRate() === $this->baseTickRate){
+							$level->setTickRate(max($this->baseTickRate + 1, min($this->autoTickRateLimit, floor($tickMs / 50))));
 							$this->getLogger()->debug("Level \"".$level->getName()."\" took ".round($tickMs, 2)."ms, setting tick rate to ".$level->getTickRate()." ticks");
-						}elseif(($tickMs / $level->getTickRate()) >= 50 and $level->getTickRate() < 10){ //Limit?
+						}elseif(($tickMs / $level->getTickRate()) >= 50 and $level->getTickRate() < $this->autoTickRateLimit){
 							$level->setTickRate($level->getTickRate() + 1);
 							$this->getLogger()->debug("Level \"".$level->getName()."\" took ".round($tickMs, 2)."ms, setting tick rate to ".$level->getTickRate()." ticks");
 						}
@@ -2234,7 +2274,7 @@ class Server{
 
 		$version = new VersionString();
 		$this->lastSendUsage = new SendUsageTask("https://stats.pocketmine.net/usage.php", [
-			"serverid" => $this->serverID,
+			"serverid" => Binary::readLong(substr(hex2bin(str_replace("-", "", $this->serverID)), 0, 8)),
 			"port" => $this->getPort(),
 			"os" => Utils::getOS(),
 			"name" => $this->getName(),
@@ -2332,7 +2372,7 @@ class Server{
 	 */
 	private function tick(){
 		$tickTime = microtime(true);
-		if($tickTime < $this->nextTick){
+		if(($tickTime - $this->nextTick) < -0.025){ //Allow half a tick of diff
 			return false;
 		}
 
@@ -2344,6 +2384,11 @@ class Server{
 
 		Timings::$connectionTimer->startTiming();
 		$this->network->processInterfaces();
+
+		if($this->rcon !== null){
+			$this->rcon->check();
+		}
+
 		Timings::$connectionTimer->stopTiming();
 
 		Timings::$schedulerTimer->startTiming();
@@ -2354,6 +2399,9 @@ class Server{
 
 		if(($this->tickCounter & 0b1111) === 0){
 			$this->titleTick();
+			$this->maxTick = 20;
+			$this->maxUse = 0;
+
 			if($this->queryHandler !== null and ($this->tickCounter & 0b111111111) === 0){
 				try{
 					$this->queryHandler->regenerateInfo();
@@ -2365,10 +2413,28 @@ class Server{
 			}
 		}
 
+		if($this->autoSave and ++$this->autoSaveTicker >= $this->autoSaveTicks){
+			$this->autoSaveTicker = 0;
+			$this->doAutoSave();
+		}
+
+		if($this->sendUsageTicker > 0 and --$this->sendUsageTicker === 0){
+			$this->sendUsageTicker = 6000;
+			$this->sendUsage();
+		}
+
 		if(($this->tickCounter % 100) === 0){
 			foreach($this->levels as $level){
 				$level->clearCache();
 			}
+
+			if($this->getTicksPerSecondAverage() < 12){
+				$this->logger->warning($this->getLanguage()->translateString("pocketmine.server.tickOverload"));
+			}
+		}
+
+		if($this->dispatchSignals and $this->tickCounter % 5 === 0){
+			pcntl_signal_dispatch();
 		}
 
 		$this->getMemoryManager()->check();
@@ -2378,10 +2444,21 @@ class Server{
 		TimingsHandler::tick();
 
 		$now = microtime(true);
+		$tick = min(20, 1 / max(0.001, $now - $tickTime));
+		$use = min(1, ($now - $tickTime) / 0.05);
+
+		if($this->maxTick > $tick){
+			$this->maxTick = $tick;
+		}
+
+		if($this->maxUse < $use){
+			$this->maxUse = $use;
+		}
+
 		array_shift($this->tickAverage);
-		$this->tickAverage[] = min(20, 1 / max(0.001, $now - $tickTime));
+		$this->tickAverage[] = $tick;
 		array_shift($this->useAverage);
-		$this->useAverage[] = min(1, ($now - $tickTime) / 0.05);
+		$this->useAverage[] = $use;
 
 		if(($this->nextTick - $tickTime) < -1){
 			$this->nextTick = $tickTime;

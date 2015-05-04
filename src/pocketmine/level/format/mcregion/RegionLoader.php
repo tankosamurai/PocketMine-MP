@@ -131,7 +131,7 @@ class RegionLoader{
 		}
 
 		$chunk = $this->unserializeChunk(fread($this->filePointer, $length - 1));
-		if($chunk instanceof Chunk){
+		if($chunk instanceof FullChunk){
 			return $chunk;
 		}elseif($forward === false){
 			MainLogger::getLogger()->error("Corrupted chunk detected");
@@ -169,7 +169,7 @@ class RegionLoader{
 		$full = $half . $half;
 		$nbt->Blocks = new ByteArray("Blocks", $full);
 		$nbt->Data = new ByteArray("Data", $half);
-		$nbt->SkyLight = new ByteArray("SkyLight", $half);
+		$nbt->SkyLight = new ByteArray("SkyLight", str_repeat("\xff", 16384));
 		$nbt->BlockLight = new ByteArray("BlockLight", $half);
 
 		$nbt->Entities = new Enum("Entities", []);

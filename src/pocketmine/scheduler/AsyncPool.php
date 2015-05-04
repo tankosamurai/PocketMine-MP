@@ -21,6 +21,7 @@
 
 namespace pocketmine\scheduler;
 
+use pocketmine\event\Timings;
 use pocketmine\Server;
 
 class AsyncPool{
@@ -103,8 +104,11 @@ class AsyncPool{
 		$this->submitTaskToWorker($task, $selectedWorker);
 	}
 
-	private function removeTask(AsyncTask $task){
+	private function removeTask(AsyncTask $task, $force = false){
 		if(isset($this->taskWorkers[$task->getTaskId()])){
+			if(!$force and ($task->isRunning() or !$task->isGarbage())){
+				return;
+			}
 			$this->workers[$w = $this->taskWorkers[$task->getTaskId()]]->unstack($task);
 			$this->workerUsage[$w]--;
 		}
@@ -113,12 +117,20 @@ class AsyncPool{
 		unset($this->taskWorkers[$task->getTaskId()]);
 
 		$task->cleanObject();
+
+		unset($task);
 	}
 
 	public function removeTasks(){
-		foreach($this->tasks as $task){
-			$this->removeTask($task);
-		}
+		do{
+			foreach($this->tasks as $task){
+				$this->removeTask($task);
+			}
+
+			if(count($this->tasks) > 0){
+				usleep(25000);
+			}
+		}while(count($this->tasks) > 0);
 
 		for($i = 0; $i < $this->size; ++$i){
 			$this->workerUsage[$i] = 0;
@@ -129,18 +141,22 @@ class AsyncPool{
 	}
 
 	public function collectTasks(){
+		Timings::$schedulerAsyncTimer->startTiming();
+
 		foreach($this->tasks as $task){
-			if($task->isGarbage()){
+			if($task->isGarbage() and !$task->isRunning()){
 
 				$task->onCompletion($this->server);
 
 				$this->removeTask($task);
 			}elseif($task->isTerminated()){
 				$info = $task->getTerminationInfo();
-				$this->removeTask($task);
+				$this->removeTask($task, true);
 				$this->server->getLogger()->critical("Could not execute asynchronous task " . (new \ReflectionClass($task))->getShortName() . ": " . $info["message"]);
 				$this->server->getLogger()->critical("On ".$info["scope"].", line ".$info["line"] .", ".$info["function"]."()");
 			}
 		}
+
+		Timings::$schedulerAsyncTimer->stopTiming();
 	}
 }

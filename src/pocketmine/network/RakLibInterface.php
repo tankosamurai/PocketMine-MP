@@ -24,6 +24,7 @@ namespace pocketmine\network;
 use pocketmine\event\player\PlayerCreationEvent;
 use pocketmine\network\protocol\DataPacket;
 use pocketmine\network\protocol\Info as ProtocolInfo;
+use pocketmine\network\protocol\Info;
 use pocketmine\network\protocol\UnknownPacket;
 use pocketmine\Player;
 use pocketmine\Server;
@@ -74,16 +75,6 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 		$this->network = $network;
 	}
 
-	public function doTick(){
-		if(!$this->rakLib->isTerminated()){
-			$this->interface->sendTick();
-		}else{
-			$info = $this->rakLib->getTerminationInfo();
-			$this->network->unregisterInterface($this);
-			\ExceptionHandler::handler(E_ERROR, "RakLib Thread crashed [".$info["scope"]."]: " . (isset($info["message"]) ? $info["message"] : ""), $info["file"], $info["line"]);
-		}
-	}
-
 	public function process(){
 		$work = false;
 		if($this->interface->handlePacket()){
@@ -92,7 +83,11 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 			}
 		}
 
-		$this->doTick();
+		if($this->rakLib->isTerminated()){
+			$info = $this->rakLib->getTerminationInfo();
+			$this->network->unregisterInterface($this);
+			\ExceptionHandler::handler(E_ERROR, "RakLib Thread crashed [".$info["scope"]."]: " . (isset($info["message"]) ? $info["message"] : ""), $info["file"], $info["line"]);
+		}
 
 		return $work;
 	}
@@ -175,13 +170,11 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 	}
 
 	public function notifyACK($identifier, $identifierACK){
-		if(isset($this->players[$identifier])){
-			$this->players[$identifier]->handleACK($identifierACK);
-		}
+
 	}
 
 	public function setName($name){
-		$this->interface->sendOption("name", "MCCPP;Demo;$name");
+		$this->interface->sendOption("name", "MCPE;".addcslashes($name, ";").";".Info::CURRENT_PROTOCOL.";".\pocketmine\MINECRAFT_VERSION_NETWORK);
 	}
 
 	public function setPortCheck($name){

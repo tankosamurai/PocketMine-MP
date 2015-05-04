@@ -29,6 +29,7 @@ use pocketmine\nbt\tag\Byte;
 use pocketmine\nbt\tag\Compound;
 use pocketmine\nbt\tag\Enum;
 use pocketmine\nbt\tag\Short;
+use pocketmine\nbt\tag\String;
 use pocketmine\network\Network;
 use pocketmine\network\protocol\AddPlayerPacket;
 use pocketmine\network\protocol\RemovePlayerPacket;
@@ -104,14 +105,20 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 			$this->nameTag = $this->namedtag["NameTag"];
 		}
 
-		foreach($this->namedtag->Inventory as $item){
-			if($item["Slot"] >= 0 and $item["Slot"] < 9){ //Hotbar
-				$this->inventory->setHotbarSlotIndex($item["Slot"], isset($item["TrueSlot"]) ? $item["TrueSlot"] : -1);
-			}elseif($item["Slot"] >= 100 and $item["Slot"] < 104){ //Armor
-				$this->inventory->setItem($this->inventory->getSize() + $item["Slot"] - 100, ItemItem::get($item["id"], $item["Damage"], $item["Count"]));
-			}else{
-				$this->inventory->setItem($item["Slot"] - 9, ItemItem::get($item["id"], $item["Damage"], $item["Count"]));
+		if(isset($this->namedtag->Inventory) and $this->namedtag->Inventory instanceof Enum){
+			foreach($this->namedtag->Inventory as $item){
+				if($item["Slot"] >= 0 and $item["Slot"] < 9){ //Hotbar
+					$this->inventory->setHotbarSlotIndex($item["Slot"], isset($item["TrueSlot"]) ? $item["TrueSlot"] : -1);
+				}elseif($item["Slot"] >= 100 and $item["Slot"] < 104){ //Armor
+					$this->inventory->setItem($this->inventory->getSize() + $item["Slot"] - 100, ItemItem::get($item["id"], $item["Damage"], $item["Count"]));
+				}else{
+					$this->inventory->setItem($item["Slot"] - 9, ItemItem::get($item["id"], $item["Damage"], $item["Count"]));
+				}
 			}
+		}
+
+		if(isset($this->namedtag->Skin) and $this->namedtag->Skin instanceof Compound){
+			$this->setSkin($this->namedtag->Skin["Data"], $this->namedtag->Skin["Slim"] > 0);
 		}
 
 		parent::initEntity();
@@ -187,6 +194,12 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 				}
 			}
 		}
+
+
+		$this->namedtag->Skin = new Compound("Skin", [
+			"Data" => new String("Data", $this->getSkinData()),
+			"Slim" => new Byte("Slim", $this->isSkinSlim() ? 1 : 0)
+		]);
 	}
 
 	public function spawnTo(Player $player){

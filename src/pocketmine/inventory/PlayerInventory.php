@@ -49,6 +49,11 @@ class PlayerInventory extends BaseInventory{
 		return parent::getSize() - 4; //Remove armor slots
 	}
 
+	public function setSize($size){
+		parent::setSize($size + 4);
+		$this->sendContents($this->getViewers());
+	}
+
 	public function getHotbarSlotIndex($index){
 		return ($index >= 0 and $index < $this->getHotbarSize()) ? $this->hotbar[$index] : -1;
 	}
@@ -66,15 +71,12 @@ class PlayerInventory extends BaseInventory{
 	public function setHeldItemIndex($index){
 		if($index >= 0 and $index < $this->getHotbarSize()){
 			$this->itemInHandIndex = $index;
-			$item = $this->getItemInHand();
 
-			$pk = new PlayerEquipmentPacket();
-			$pk->eid = $this->getHolder()->getId();
-			$pk->item = $item->getId();
-			$pk->meta = $item->getDamage();
-			$pk->slot = $this->getHeldItemIndex();
-
-			Server::broadcastPacket($this->getHolder()->getViewers(), $pk->setChannel(Network::CHANNEL_ENTITY_SPAWNING));
+			if($this->getHolder() instanceof Player){
+				$this->sendHeldItem($this->getHolder()->getViewers() + [$this->getHolder()]);
+			}else{
+				$this->sendHeldItem($this->getHolder()->getViewers());
+			}
 		}
 	}
 
@@ -106,13 +108,6 @@ class PlayerInventory extends BaseInventory{
 
 			$itemIndex = $this->getHeldItemIndex();
 
-			for($i = 0; $i < $this->getHotbarSize(); ++$i){
-				if($this->getHotbarSlotIndex($i) === $slot){
-					$itemIndex = $i;
-					break;
-				}
-			}
-
 			if($this->getHolder() instanceof Player){
 				Server::getInstance()->getPluginManager()->callEvent($ev = new PlayerItemHeldEvent($this->getHolder(), $item, $slot, $itemIndex));
 				if($ev->isCancelled()){
@@ -122,7 +117,6 @@ class PlayerInventory extends BaseInventory{
 			}
 
 			$this->setHotbarSlotIndex($itemIndex, $slot);
-			$this->setHeldItemIndex($itemIndex);
 		}
 	}
 
@@ -140,15 +134,16 @@ class PlayerInventory extends BaseInventory{
 		$pk->eid = $this->getHolder()->getId();
 		$pk->item = $item->getId();
 		$pk->meta = $item->getDamage();
-		$pk->slot = 0;
+		$pk->slot = $this->getHeldItemSlot();
+		$pk->selectedSlot = $this->getHeldItemIndex();
 		$pk->isEncoded = true;
-		$pk->encode();
+
+		Server::broadcastPacket($target, $pk->setChannel(Network::CHANNEL_ENTITY_SPAWNING));
 
 		foreach($target as $player){
 			if($player === $this->getHolder()){
 				$this->sendSlot($this->getHeldItemSlot(), $player);
-			}else{
-				$player->dataPacket($pk->setChannel(Network::CHANNEL_ENTITY_SPAWNING));
+				break;
 			}
 		}
 	}

@@ -38,7 +38,6 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 	 * @param int            $x
 	 * @param int            $z
 	 * @param ChunkSection[] $sections
-	 * @param string         $biomeIds
 	 * @param int[]          $biomeColors
 	 * @param int[]          $heightMap
 	 * @param Compound[]     $entities
@@ -46,7 +45,7 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 	 *
 	 * @throws ChunkException
 	 */
-	protected function __construct($provider, $x, $z, array $sections, $biomeIds = null, array $biomeColors = [], array $heightMap = [], array $entities = [], array $tiles = []){
+	protected function __construct($provider, $x, $z, array $sections, array $biomeColors = [], array $heightMap = [], array $entities = [], array $tiles = []){
 		$this->provider = $provider;
 		$this->x = (int) $x;
 		$this->z = (int) $z;
@@ -62,16 +61,10 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 			}
 		}
 
-		if(strlen($biomeIds) === 256){
-			$this->biomeIds = $biomeIds;
-		}else{
-			$this->biomeIds = str_repeat("\x01", 256);
-		}
-
 		if(count($biomeColors) === 256){
 			$this->biomeColors = $biomeColors;
 		}else{
-			$this->biomeColors = array_fill(0, 256, Binary::readInt("\x00\x85\xb2\x4a"));
+			$this->biomeColors = array_fill(0, 256, Binary::readInt("\x01\x85\xb2\x4a"));
 		}
 
 		if(count($heightMap) === 256){

@@ -74,7 +74,8 @@ namespace pocketmine {
 	const VERSION = "1.5dev";
 	const API_VERSION = "1.12.0";
 	const CODENAME = "活発(Kappatsu)フグ(Fugu)";
-	const MINECRAFT_VERSION = "v0.11.0 alpha build 5";
+	const MINECRAFT_VERSION = "v0.11.0 alpha build 8";
+	const MINECRAFT_VERSION_NETWORK = "0.11.0.8";
 
 	/*
 	 * Startup code. Do not look at it, it may harm you.
@@ -465,23 +466,19 @@ namespace pocketmine {
 
 	foreach(ThreadManager::getInstance()->getAll() as $id => $thread){
 		if($thread->isRunning()){
-			$logger->debug("Stopping " . (new \ReflectionClass($thread))->getShortName() . " thread");
-			if($thread instanceof Thread){
-				$thread->kill();
-				sleep(1);
-				if($thread->isRunning()){
-					$thread->detach();
-				}
-			}elseif($thread instanceof Worker){
-				$thread->kill();
-				sleep(1);
-				if($thread->isRunning()){
-					$thread->detach();
-				}
-			}
+			$logger->debug("Killing " . (new \ReflectionClass($thread))->getShortName() . " thread");
+			$thread->kill();
+			sleep(1);
+			$thread->detach();
 		}elseif(!$thread->isJoined()){
-			$logger->debug("Joining " . (new \ReflectionClass($thread))->getShortName() . " thread");
-			$thread->join();
+			if(!$thread->isTerminated()){
+				$logger->debug("Joining " . (new \ReflectionClass($thread))->getShortName() . " thread");
+				$thread->join();
+			}else{
+				$logger->debug("Killing " . (new \ReflectionClass($thread))->getShortName() . " thread");
+				$thread->kill();
+				$thread->detach();
+			}
 		}
 	}
 
